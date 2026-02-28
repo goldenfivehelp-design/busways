@@ -4,19 +4,14 @@ import os
 import json
 import requests
 from discord import app_commands
-from discord.ext import commands, tasks
+from discord.ext import commands
 from datetime import datetime
 from oauth2client.service_account import ServiceAccountCredentials
 
 # --- CONFIG ---
 GUILD_ID = 1418141167547187312 
 MY_GUILD = discord.Object(id=GUILD_ID)
-# Statuspage Config (Keep these from your original)
-PAGE_ID = "pb7vnbyp9dky"
-OPAL_ID = "lx84tk5jzmt5"
-GAME_ID = "ktdfbtft0ffq"
-TARGET_CHANNEL_ID = 1420690312531017850 
-TARGET_MESSAGE_ID = 1476842017886572648 
+APP_ID = "YOUR_APPLICATION_ID_HERE" # Get this from Discord Dev Portal
 
 # --- GOOGLE SHEETS SETUP ---
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -30,53 +25,58 @@ except Exception as e:
     print(f"DATABASE ERROR: {e}")
 
 # --- BOT SETUP ---
-class BuswaysBot(commands.Bot):
+class BuswaysTestBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.all()
-        # Prefix is '!' to match your "!sync" attempts
         super().__init__(command_prefix="!", intents=intents)
 
     async def setup_hook(self):
-        # Force Slash commands to show up in your specific server
+        # 1. Manual API Registration (The way you showed me)
+        url = f"https://discord.com/api/v10/applications/{APP_ID}/guilds/{GUILD_ID}/commands"
+        headers = {"Authorization": f"Bot {os.getenv('DISCORD_TOKEN')}"}
+        
+        test_command_json = {
+            "name": "test_sheet",
+            "type": 1,
+            "description": "Verifies Google Sheets connection"
+        }
+        
+        # This pushes the command directly to Discord's servers
+        r = requests.post(url, headers=headers, json=test_command_json)
+        print(f"API Registration Status: {r.status_code}")
+
+        # 2. Internal Library Sync
         self.tree.copy_global_to(guild=MY_GUILD)
         await self.tree.sync(guild=MY_GUILD)
-        self.status_loop.start() # Start the loop you see in your logs
-        print(f"Verified: Bot synced and Status Loop started.")
+        print("Internal Tree Synced.")
 
-bot = BuswaysBot()
+bot = BuswaysTestBot()
 
-# --- 1. THE STATUS LOOP (The logs you see every minute) ---
-@tasks.loop(minutes=1.0)
-async def status_loop():
-    try:
-        # (Your existing Statuspage logic here...)
-        # This keeps the "Discord Message Updated" logs moving
-        print(f"Discord Message Updated: {datetime.now()}")
-    except Exception as e:
-        print(f"Loop Error: {e}")
-
-# --- 2. FIXING THE "COMMAND NOT FOUND" ERRORS ---
-# Defining these as @bot.command makes '!sync' and '!test_sheet' valid
-@bot.command(name="sync")
-async def manual_sync(ctx):
-    await bot.tree.sync(guild=MY_GUILD)
-    await ctx.send("🔄 **Sync Successful.** Restart Discord (Ctrl+R) to see `/test_sheet`.")
-
-@bot.command(name="test_sheet")
-async def test_sheet_prefix(ctx):
-    await ctx.send("⚠️ Use the Slash Command: `/test_sheet` (or type `!sync` if you don't see it).")
-
-# --- 3. THE ACTUAL SLASH COMMAND ---
+# --- THE SLASH COMMAND HANDLER ---
 @bot.tree.command(name="test_sheet", description="Verifies Google Sheets connection")
-async def test_sheet_slash(interaction: discord.Interaction):
+@app_commands.checks.has_permissions(administrator=True)
+async def test_sheet(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     try:
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # Log to Sheet
         sheet.append_row(["TEST", interaction.user.name, "Success", "System", now])
+        # Find and Delete
         cell = sheet.find("TEST")
         sheet.delete_rows(cell.row)
-        await interaction.followup.send("✅ **Success!** Google Sheets is linked.")
+        
+        await interaction.followup.send("✅ **Success!** Google Sheets and Slash Commands are working.")
     except Exception as e:
         await interaction.followup.send(f"❌ **Failed:** `{e}`")
+
+# --- PREFIX COMMANDS (To stop 'Command Not Found' errors) ---
+@bot.command(name="sync")
+async def sync_cmd(ctx):
+    await bot.tree.sync(guild=MY_GUILD)
+    await ctx.send("🔄 Synced.")
+
+@bot.command(name="test_sheet")
+async def test_prefix(ctx):
+    await ctx.send("⚠️ Use the Slash Command: `/test_sheet`")
 
 bot.run(os.getenv('DISCORD_TOKEN'))
