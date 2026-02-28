@@ -1,6 +1,7 @@
 import discord
 import requests
 import os
+import time  # Used for Unix timestamps
 from discord.ext import commands, tasks
 from datetime import datetime
 
@@ -21,7 +22,6 @@ TARGET_MESSAGE_ID = 1476842017886572648
 def get_comp_status(comp_id, label):
     """Fetches component status using the official Statuspage API v1 path."""
     API_KEY = os.getenv('STATUSPAGE_API_KEY')
-    # Statuspage API uses 'Authorization: OAuth <key>'
     headers = {"Authorization": f"OAuth {API_KEY}"}
     
     # Corrected API URL Structure
@@ -33,22 +33,18 @@ def get_comp_status(comp_id, label):
         if r.status_code == 200:
             data = r.json()
             raw_status = data.get('status', 'unknown')
-            print(f"DEBUG: {label} fetched as {raw_status}")
             
             status_map = {
                 "operational": "✅ Operational",
                 "degraded_performance": "🟨 Degraded performance",
-                "partial_outage": "\U0001f7e7 Partial outage",
+                "partial_outage": "🟧 Partial outage",
                 "major_outage": "🟥 Major outage",
                 "under_maintenance": "🟦 Under maintenance"
             }
             return status_map.get(raw_status, f"❓ {raw_status.replace('_', ' ').title()}")
-        
         else:
-            print(f"DEBUG ERROR: {label} API returned {r.status_code}: {r.text}")
             return "❌ API Error"
-            
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         print(f"DEBUG NETWORK ERROR: {label} - {e}")
         return "⚠️ Connection Failed"
 
@@ -56,19 +52,23 @@ def get_comp_status(comp_id, label):
 @tasks.loop(minutes=1.0)
 async def update_status_loop():
     try:
-        # 1. Access Discord elements
         channel = bot.get_channel(TARGET_CHANNEL_ID) or await bot.fetch_channel(TARGET_CHANNEL_ID)
         message = await channel.fetch_message(TARGET_MESSAGE_ID)
         
-        # 2. Fetch data from Statuspage
+        # Fetch actual statuses
         opal_status = get_comp_status(OPAL_ID, "Opal")
         game_status = get_comp_status(GAME_ID, "Game")
         
-        # 3. Build the Embed
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # --- DYNAMIC TIME LOGIC ---
+        # This gets the current Unix time (seconds since 1970)
+        unix_timestamp = int(time.time())
+        # Discord format: <t:timestamp:f> shows "Date at Time" in the USER's timezone
+        discord_time_string = f"<t:{unix_timestamp}:f>"
+
+        # Create Embed
         embed = discord.Embed(
             title="Busways Status",
-            description="Hello, I am Busways Assistance. I monitor game data and update this status every minute.",
+            description=f"Hello, I am Busways Assistance. I provide live data on the status of our systems.\n**Last Sync:** {discord_time_string}",
             color=5814783 
         )
         
@@ -77,28 +77,27 @@ async def update_status_loop():
             value=f"Opal Data Status: **{opal_status}**", 
             inline=False
         )
+        
         embed.add_field(
-            name="Game Connectivity", 
-            value=f"Game Status: **{game_status}**", 
+            name="Game Status", 
+            value=f"Current Status: **{game_status}**", 
             inline=False
         )
-        embed.set_footer(text=f"Last Sync: {current_time} (UTC/Server Time)")
+        
+        # Using :R at the end shows a countdown like "1 minute ago"
+        embed.set_footer(text="Updates every minute • Auto-adjusts to your timezone")
 
-        # 4. Update the message
         await message.edit(embed=embed)
-        print(f"Update Successful: {current_time}")
+        print(f"Discord Message Updated: {datetime.now()}")
 
-    except discord.NotFound:
-        print("Loop Error: Message or Channel not found. Check your IDs.")
     except Exception as e:
         print(f"Loop Error: {e}")
 
 # --- 4. STARTUP ---
 @bot.event
 async def on_ready():
-    print(f'--- Bot Online as {bot.user} ---')
+    print(f'Logged in as {bot.user}')
     if not update_status_loop.is_running():
         update_status_loop.start()
 
-# Start the bot
 bot.run(os.getenv('DISCORD_TOKEN'))
