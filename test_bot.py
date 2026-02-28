@@ -11,7 +11,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 # --- CONFIG ---
 GUILD_ID = 1418141167547187312 
 MY_GUILD = discord.Object(id=GUILD_ID)
-APP_ID = "YOUR_APPLICATION_ID_HERE" # Get this from Discord Dev Portal
+APP_ID = "1476833993671446628" # Get this from Discord Dev Portal
 
 # --- GOOGLE SHEETS SETUP ---
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
