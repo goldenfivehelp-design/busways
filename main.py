@@ -23,16 +23,20 @@ async def update_status_loop():
         channel = bot.get_channel(TARGET_CHANNEL_ID) or await bot.fetch_channel(TARGET_CHANNEL_ID)
         message = await channel.fetch_message(TARGET_MESSAGE_ID)
         
-        # API Auth
+        # API Auth - Pulling from Railway Variables
         API_KEY = os.getenv('STATUSPAGE_API_KEY')
         headers = {"Authorization": f"OAuth {API_KEY}"}
         
         def get_comp_status(comp_id):
-            # FIXED URL: Added all required slashes manually
             url = f"https://api.statuspage.io{PAGE_ID}/components/{comp_id}"
-            
             try:
                 r = requests.get(url, headers=headers, timeout=10)
+                
+                # --- DEBUG LOGGING ---
+                # This will tell us if the key is bad (401) or the ID is bad (404)
+                if r.status_code != 200:
+                    print(f"DEBUG: {comp_id} failed with {r.status_code}: {r.text}")
+                
                 if r.status_code == 200:
                     data = r.json()
                     raw_status = data.get('status', 'unknown')
@@ -44,10 +48,10 @@ async def update_status_loop():
                         "under_maintenance": "🟦 Under maintenance"
                     }
                     return status_map.get(raw_status, f"❓ {raw_status.replace('_', ' ').title()}")
-                else:
-                    return f"❌ API Error ({r.status_code})"
+                return "❌ Connection Error"
             except Exception as e:
-                return f"❌ Connection Error"
+                print(f"Network Error: {e}")
+                return "❌ Connection Error"
 
         # Fetch statuses
         opal_status = get_comp_status(OPAL_ID)
