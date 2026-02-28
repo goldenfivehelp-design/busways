@@ -7,8 +7,11 @@ from discord.ext import commands
 from datetime import datetime
 from oauth2client.service_account import ServiceAccountCredentials
 
-# --- 1. GOOGLE SHEETS SETUP ---
-# This pulls the JSON from your Railway Environment Variables
+# --- CONFIG ---
+GUILD_ID = 1418141167547187312  # Your Server ID
+MY_GUILD = discord.Object(id=GUILD_ID)
+
+# --- GOOGLE SHEETS SETUP ---
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
 try:
@@ -16,52 +19,47 @@ try:
     creds_dict = json.loads(creds_json)
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
-    
-    # Ensure this name matches your Google Sheet exactly!
     sheet = client.open("Busways Mod Logs").sheet1 
 except Exception as e:
-    print(f"CRITICAL CONFIG ERROR: {e}")
+    print(f"DATABASE ERROR: {e}")
 
-# --- 2. BOT SETUP ---
+# --- BOT SETUP ---
 class TestBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.all()
+        # Prefix is still '!' just for the manual sync command
         super().__init__(command_prefix="!", intents=intents)
 
     async def setup_hook(self):
-        # This syncs the /test_sheet command so it appears in Discord
-        await self.tree.sync()
-        print("Slash commands synced successfully.")
+        # This forces the commands to your specific server INSTANTLY
+        self.tree.copy_global_to(guild=MY_GUILD)
+        await self.tree.sync(guild=MY_GUILD)
+        print(f"Commands synced to Guild: {GUILD_ID}")
 
 bot = TestBot()
 
-# --- 3. THE TEST COMMAND ---
+# --- THE TEST COMMAND ---
 @bot.tree.command(name="test_sheet", description="Verifies the Google Sheets connection")
 @app_commands.checks.has_permissions(administrator=True)
 async def test_sheet(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True) # Give the bot time to talk to Google
-    
+    await interaction.response.defer(ephemeral=True)
     try:
-        # 1. Attempt to write a test row
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         test_row = ["TEST_ID", "Tester", "Connection Success!", "System", now]
         sheet.append_row(test_row)
         
-        # 2. Immediately find and delete it to keep the sheet clean
         cell = sheet.find("TEST_ID")
         sheet.delete_rows(cell.row)
             
-        await interaction.followup.send("✅ **Success!** The bot can read and write to your Google Sheet.")
-        print(f"Sheet Test Successful at {now}")
-        
+        await interaction.followup.send("✅ **Success!** Google Sheets is linked.")
     except Exception as e:
-        await interaction.followup.send(f"❌ **Connection Failed:** `{e}`")
-        print(f"Sheet Test Failed: {e}")
+        await interaction.followup.send(f"❌ **Failed:** `{e}`")
 
-# --- 4. STARTUP ---
-@bot.event
-async def on_ready():
-    print(f'Logged in as {bot.user} (ID: {bot.user.id})')
-    print('------')
+# --- MANUAL SYNC COMMAND (BACKUP) ---
+@bot.command()
+@commands.is_owner()
+async def sync(ctx):
+    await bot.tree.sync(guild=MY_GUILD)
+    await ctx.send("Force synced commands to this server.")
 
 bot.run(os.getenv('DISCORD_TOKEN'))
