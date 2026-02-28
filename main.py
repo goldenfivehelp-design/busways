@@ -31,18 +31,14 @@ async def update_status_loop():
         headers = {"Authorization": f"OAuth {API_KEY}"}
         
         def get_comp_status(comp_id, label):
-            # FIXED URL: Added the manual / after /pages/
-            url = f"https://api.statuspage.io{PAGE_ID}/components/{comp_id}"
+            # MANUALLY FIXED URL TO PREVENT MASHING
+            url = f"https://api.statuspage.io{comp_id}"
             try:
                 r = requests.get(url, headers=headers, timeout=10)
-                
                 if r.status_code == 200:
                     data = r.json()
                     raw_status = data.get('status', 'unknown')
-                    # This prints "DEBUG: Opal Status: operational" to your Railway logs
                     print(f"DEBUG: {label} Status: {raw_status}") 
-
-                    # YOUR CUSTOM ICON MAPPING
                     status_map = {
                         "operational": "✅ Operational",
                         "degraded_performance": "🟨 Degraded performance",
@@ -52,13 +48,12 @@ async def update_status_loop():
                     }
                     return status_map.get(raw_status, f"❓ {raw_status.replace('_', ' ').title()}")
                 else:
-                    # Log specific error for troubleshooting
-                    print(f"DEBUG ERROR: {label} failed with {r.status_code}: {r.text}")
+                    print(f"DEBUG ERROR: {label} failed with {r.status_code}")
                     return "❌ Connection Error"
             except Exception as e:
-                # Log networking errors
                 print(f"DEBUG NETWORK ERROR: {label} - {e}")
                 return "❌ Connection Error"
+
 
         # Fetch statuses with labels for the console
         opal_status = get_comp_status(OPAL_ID, "Opal")
