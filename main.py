@@ -19,27 +19,24 @@ TARGET_MESSAGE_ID = 1476842017886572648
 @tasks.loop(minutes=1.0)
 async def update_status_loop():
     try:
-        # Get the channel and fetch the specific message
         channel = bot.get_channel(TARGET_CHANNEL_ID) or await bot.fetch_channel(TARGET_CHANNEL_ID)
         message = await channel.fetch_message(TARGET_MESSAGE_ID)
         
-        # API Auth - Pulling from Railway Variables
         API_KEY = os.getenv('STATUSPAGE_API_KEY')
         headers = {"Authorization": f"OAuth {API_KEY}"}
         
-        def get_comp_status(comp_id):
+        def get_comp_status(comp_id, label):
             url = f"https://api.statuspage.io{PAGE_ID}/components/{comp_id}"
             try:
                 r = requests.get(url, headers=headers, timeout=10)
                 
-                # --- DEBUG LOGGING ---
-                # This will tell us if the key is bad (401) or the ID is bad (404)
-                if r.status_code != 200:
-                    print(f"DEBUG: {comp_id} failed with {r.status_code}: {r.text}")
-                
+                # --- CONSOLE DEBUG LOGGING ---
                 if r.status_code == 200:
                     data = r.json()
                     raw_status = data.get('status', 'unknown')
+                    # This prints "Opal Status: operational" to your Railway logs
+                    print(f"DEBUG: {label} Status: {raw_status}") 
+
                     status_map = {
                         "operational": "✅ Operational",
                         "degraded_performance": "🟨 Degraded performance",
@@ -48,14 +45,16 @@ async def update_status_loop():
                         "under_maintenance": "🟦 Under maintenance"
                     }
                     return status_map.get(raw_status, f"❓ {raw_status.replace('_', ' ').title()}")
-                return "❌ Connection Error"
+                else:
+                    print(f"DEBUG ERROR: {label} failed with {r.status_code}: {r.text}")
+                    return "❌ Connection Error"
             except Exception as e:
-                print(f"Network Error: {e}")
+                print(f"DEBUG NETWORK ERROR: {label} - {e}")
                 return "❌ Connection Error"
 
-        # Fetch statuses
-        opal_status = get_comp_status(OPAL_ID)
-        game_status = get_comp_status(GAME_ID)
+        # Fetch statuses with labels for the console
+        opal_status = get_comp_status(OPAL_ID, "Opal")
+        game_status = get_comp_status(GAME_ID, "Game")
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # Create Embed
@@ -68,9 +67,8 @@ async def update_status_loop():
         embed.add_field(name=f"Game Status: {game_status}", value=" ", inline=False)
         embed.set_footer(text=f"Updated {current_time} (Local Time)")
 
-        # EDIT the message
         await message.edit(embed=embed)
-        print(f"Status Updated: {current_time}")
+        print(f"Discord Message Updated: {current_time}")
 
     except Exception as e:
         print(f"Loop Error: {e}")
